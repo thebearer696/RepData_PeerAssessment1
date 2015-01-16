@@ -1,25 +1,106 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Peer Assessment 1"
+output: html_document
 ---
 
+Part - 1: Loading and Pre-Processing Data
+```{r}
+library(ggplot2)
+library(scales)
+library(grid)
+library(gridExtra)
+```
+```{r, echo=TRUE}
+#loading of data from "activity.csv"
+connection <- unz("activity.zip","activity.csv")
+activity <- read.table(file = connection,header = TRUE,sep = ",")
 
-## Loading and preprocessing the data
+#Preprocessing Data
+activity$datetime <- as.POSIXct(with(activity,paste(date,paste(interval %/%100, interval %% 100, sep=":"))),format="%Y-%m-%d %H:%M",tz="")
+```
+End of Part - 1
 
+Part - 2: Mean total number of steps taken each day.
+```{r, echo=TRUE}
+# Making the distribution.
+stepsPerDay <- setNames(aggregate(steps~as.Date(date),activity,sum,na.rm =TRUE),c("date","steps"))
+# plotting the histogram for the above distribution
+hist1 <- ggplot(stepsPerDay,aes(x=date,y=steps))+geom_bar(stat="identity") + ggtitle("Total number of steps per day (source data)")
+print(hist1)
+```
+```{r, echo=TRUE}
+#Summary
+summary(stepsPerDay$steps)
+#Displaying Mean and Median
+mm_1 <- c(mean = mean(stepsPerDay$steps),median = median(stepsPerDay$steps))
+print(mm_1)
+```
 
+End of Part - 2.
 
-## What is mean total number of steps taken per day?
+Part - 3: Finding Average daily Activity Patteern.
+Question 1:  
+```{r, echo=TRUE}
+avgPattern <- aggregate(steps~interval,activity,mean,na.rm = TRUE)
+avgPattern$time <- as.POSIXct(with(avgPattern,paste(interval %/% 100, interval%% 100, sep=":")),format="%H:%M")
+plotp3 <- ggplot(avgPattern,aes(x=time,y=steps)) + geom_line() + scale_x_datetime(breaks = date_breaks("2 hour"),labels = date_format("%H:%M"))
+print(plotp3)
+```
+Question 2:
+```{r, echo=TRUE}
+with(avgPattern,avgPattern[steps == max(steps),])
+```
 
+End of Part - 3.
 
+Part - 4: Imputing missing values.
+```{r, echo=TRUE}
+# Finding missing data..
+mis <- aggregate(cnt~date,cbind(activity[is.na(activity$steps),],cnt=c(1)),sum,na.rm = FALSE)
+mis$dow <- weekdays(as.Date(mis$date),abbreviate=TRUE)
+print(mis[,c(1,3,2)])
+unique(mis$dow)
+```
+Number of missing data values are 288*8 = 2,304.
+```{r}
+# Reference dataset for calculating the missing values.
+ref_dataset <- aggregate(steps~interval+weekdays(datetime,abbreviate=TRUE),activity,FUN=mean,na.rm=TRUE)
+colnames(ref_dataset) <- c("interval","dow","avg_steps")
+ref_dataset$dow <- factor(ref_dataset$dow,levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+ggplot(ref_dataset,aes(x=interval,y=avg_steps)) + geom_line() + facet_grid("dow ~ .")
+# Creating A fixed Dataset.
+activity$dow <- weekdays(activity$datetime,abbreviate=TRUE)
+actfin <- merge(activity,ref_dataset,by=c("dow","interval"),all.x = TRUE)
+actfin <- actfin[with(actfin,order(date,interval)),]
+actfin$fixed_steps <- ifelse(is.na(actfin$steps),actfin$avg_steps,actfin$steps)
+```
+Comparing Datasets
+```{r, echo=TRUE}
+#Making the dataset for Histogram
+stepsPerDay2 <- setNames(aggregate(fixed_steps~as.Date(date),actfin,sum,na.rm = TRUE),c("date","steps"))
+```
+```{r, echo=TRUE}
+# Plotting histogram
+hist2 <- ggplot(stepsPerDay2,aes(x=date,y=steps)) + geom_bar(stat="identity")+ggtitle("Total number of steps per day (fixed data)")
+```
+**Combining view for comparison**
+```{r, echo=TRUE}
+grid.arrange(hist1, hist2, nrow=2)
+```
+```{r, echo=TRUE}
+mm_2 <- c(mean = mean(stepsPerDay2$steps),median = median(stepsPerDay2$steps))
+comparison <- rbind(source = mm_1, fixed = mm_2, delta = mm_2-mm_1)
+print(comparison)
+```
 
-## What is the average daily activity pattern?
+End of part - 4.
 
+Part - 5: Checking for difference in activity of weekdays and weekends.
+```{r, echo=TRUE}
+week_diff <- aggregate(steps~dow+interval, with(activity,data.frame(dow = factor(ifelse(weekdays(as.Date(date)) %in% c("Sunday","Saturday"),"weekend","weekday" )),interval,steps)),FUN = mean,rm.na = TRUE) # group steps by weekend/weekday and interval to find average steps
+ggplot(week_diff,aes(x=interval,y=steps)) + geom_line() + facet_grid("dow ~ .")
+```
+End of Part - 5.
 
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+End of Assignment.
+=================
